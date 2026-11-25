@@ -1,8 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Bath, PawPrint, ShoppingBag, Utensils } from "lucide-react";
-import { SEED_ITEMS } from "@/data/items";
+import { useMemo, useState, useSyncExternalStore } from "react";
+import { Bath, PawPrint, Plus, ShoppingBag, Utensils } from "lucide-react";
+import { ItemSheet, type ItemFormValues } from "@/components/item-sheet";
+import {
+  getItemsSnapshot,
+  getServerItemsSnapshot,
+  saveItems,
+  subscribeItems,
+} from "@/lib/storage";
 import type { Category, Item, ItemStatus } from "@/types/item";
 
 type FilterId = "all" | Category;
@@ -52,8 +58,6 @@ const STATUS_TEXT: Record<ItemStatus, string> = {
   red: "text-rose-600",
 };
 
-const SEED_ORDER = new Map(SEED_ITEMS.map((item, index) => [item.id, index]));
-
 const CATEGORY_ICON = {
   bathroom: Bath,
   kitchen: Utensils,
@@ -62,16 +66,31 @@ const CATEGORY_ICON = {
 } as const;
 
 function sortByUrgency(items: Item[]) {
-  return [...items].sort((a, b) => {
-    const byStatus = STATUS_RANK[a.status] - STATUS_RANK[b.status];
-    if (byStatus !== 0) return byStatus;
-    return (SEED_ORDER.get(a.id) ?? 0) - (SEED_ORDER.get(b.id) ?? 0);
-  });
+  return [...items].sort(
+    (a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status],
+  );
+}
+
+function createId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 export function StockBoard() {
-  const [items, setItems] = useState<Item[]>(SEED_ITEMS);
+  const items = useSyncExternalStore(
+    subscribeItems,
+    getItemsSnapshot,
+    getServerItemsSnapshot,
+  );
   const [filter, setFilter] = useState<FilterId>("all");
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<Item | null>(null);
+
+  function commitItems(updater: (current: Item[]) => Item[]) {
+    saveItems(updater(items));
+  }
 
   const visibleItems = useMemo(() => {
     const filtered =
@@ -92,26 +111,86 @@ export function StockBoard() {
   }, [visibleItems]);
 
   function cycleStatus(id: string) {
-    setItems((current) =>
+    commitItems((current) =>
       current.map((item) =>
         item.id === id ? { ...item, status: NEXT_STATUS[item.status] } : item,
       ),
     );
   }
 
+  function openAddSheet() {
+    setEditingItem(null);
+    setSheetOpen(true);
+  }
+
+  function openEditSheet(item: Item) {
+    setEditingItem(item);
+    setSheetOpen(true);
+  }
+
+  function closeSheet() {
+    setSheetOpen(false);
+  }
+
+  function handleSaveItem(values: ItemFormValues) {
+    if (editingItem) {
+      commitItems((current) =>
+        current.map((item) =>
+          item.id === editingItem.id
+            ? {
+                ...item,
+                name: values.name,
+                category: values.category,
+                status: values.status,
+                amazonAsin: values.amazonAsin,
+                defaultQty: values.defaultQty,
+              }
+            : item,
+        ),
+      );
+    } else {
+      const newItem: Item = {
+        id: createId(),
+        name: values.name,
+        category: values.category,
+        status: values.status,
+        amazonAsin: values.amazonAsin,
+        defaultQty: values.defaultQty,
+        lastRestockedAt: new Date().toISOString(),
+      };
+      commitItems((current) => [newItem, ...current]);
+    }
+    setSheetOpen(false);
+  }
+
+  function handleDeleteItem(id: string) {
+    commitItems((current) => current.filter((item) => item.id !== id));
+    setSheetOpen(false);
+  }
+
   return (
     <div className="min-h-dvh bg-zinc-100 text-zinc-900">
       <main className="mx-auto flex w-full max-w-md flex-col px-4 pb-10 pt-8">
-        <header>
-          <p className="text-xs font-semibold tracking-[0.2em] text-zinc-400">
-            HOMESTOCK
-          </p>
-          <h1 className="mt-2 text-[1.7rem] font-semibold tracking-tight">
-            家里还够不够
-          </h1>
-          <p className="mt-2 text-sm leading-6 text-zinc-500">
-            点右侧的灯切换状态，按绿、黄、红循环。红灯会自动排到最上面。
-          </p>
+        <header className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold tracking-[0.2em] text-zinc-400">
+              HOMESTOCK
+            </p>
+            <h1 className="mt-2 text-[1.7rem] font-semibold tracking-tight">
+              家里还够不够
+            </h1>
+            <p className="mt-2 text-sm leading-6 text-zinc-500">
+              点右侧的灯切换状态，点击卡片可编辑或删除。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={openAddSheet}
+            aria-label="新增物品"
+            className="mt-1 flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-zinc-900 text-white shadow-[0_4px_14px_rgba(24,24,27,0.22)] transition-transform active:scale-95 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+          >
+            <Plus className="size-5 stroke-[2.5]" />
+          </button>
         </header>
 
         <div
@@ -158,45 +237,84 @@ export function StockBoard() {
           </div>
         </div>
 
-        <ul
-          className="mt-3 flex flex-col gap-3"
-          role="tabpanel"
-          aria-label="日用品库存列表"
-        >
-          {visibleItems.map((item) => {
-            const Icon = CATEGORY_ICON[item.category];
-            return (
-              <li
-                key={item.id}
-                className="flex items-center gap-3 rounded-3xl bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(24,24,27,0.04),0_10px_24px_rgba(24,24,27,0.05)]"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-medium">{item.name}</p>
-                  <p className="mt-1 flex items-center gap-1 text-xs text-zinc-400">
-                    <Icon className="size-3.5" aria-hidden="true" />
-                    {CATEGORY_LABEL[item.category]}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => cycleStatus(item.id)}
-                  aria-label={`${item.name}，当前${STATUS_LABEL[item.status]}，点击切换`}
-                  className="flex w-16 shrink-0 cursor-pointer flex-col items-center gap-1.5 rounded-2xl py-1 transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+        {visibleItems.length === 0 ? (
+          <div className="mt-4 flex flex-col items-center rounded-3xl bg-white px-6 py-10 text-center shadow-[0_1px_2px_rgba(24,24,27,0.04),0_10px_24px_rgba(24,24,27,0.05)]">
+            <p className="text-sm font-medium text-zinc-600">
+              {items.length === 0 ? "还没有记录任何日用品" : "当前分类下还没有物品"}
+            </p>
+            <button
+              type="button"
+              onClick={openAddSheet}
+              className="mt-3 inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-zinc-900 px-4 py-2 text-xs font-semibold text-white hover:bg-zinc-800"
+            >
+              <Plus className="size-3.5" />
+              添加一件
+            </button>
+          </div>
+        ) : (
+          <ul
+            className="mt-3 flex flex-col gap-3"
+            role="tabpanel"
+            aria-label="日用品库存列表"
+          >
+            {visibleItems.map((item) => {
+              const Icon = CATEGORY_ICON[item.category];
+              return (
+                <li
+                  key={item.id}
+                  className="flex items-center gap-3 rounded-3xl bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(24,24,27,0.04),0_10px_24px_rgba(24,24,27,0.05)]"
                 >
-                  <span
-                    className={`size-8 rounded-full transition-colors ${STATUS_DOT[item.status]}`}
-                  />
-                  <span
-                    className={`text-[11px] font-medium leading-none ${STATUS_TEXT[item.status]}`}
+                  <button
+                    type="button"
+                    onClick={() => openEditSheet(item)}
+                    aria-label={`编辑 ${item.name}`}
+                    className="min-w-0 flex-1 cursor-pointer rounded-2xl py-0.5 text-left transition-opacity active:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
                   >
-                    {STATUS_LABEL[item.status]}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+                    <p className="truncate text-base font-medium">{item.name}</p>
+                    <p className="mt-1 flex items-center gap-1.5 text-xs text-zinc-400">
+                      <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+                      <span>{CATEGORY_LABEL[item.category]}</span>
+                      {item.defaultQty > 1 && (
+                        <span>· 每次 {item.defaultQty} 件</span>
+                      )}
+                      {item.amazonAsin && (
+                        <span className="font-mono text-[11px] text-zinc-400">
+                          · {item.amazonAsin}
+                        </span>
+                      )}
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => cycleStatus(item.id)}
+                    aria-label={`${item.name}，当前${STATUS_LABEL[item.status]}，点击切换`}
+                    className="flex w-16 shrink-0 cursor-pointer flex-col items-center gap-1.5 rounded-2xl py-1 transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+                  >
+                    <span
+                      className={`size-8 rounded-full transition-colors ${STATUS_DOT[item.status]}`}
+                    />
+                    <span
+                      className={`text-[11px] font-medium leading-none ${STATUS_TEXT[item.status]}`}
+                    >
+                      {STATUS_LABEL[item.status]}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </main>
+
+      {sheetOpen && (
+        <ItemSheet
+          key={editingItem?.id ?? "new"}
+          editingItem={editingItem}
+          onClose={closeSheet}
+          onSave={handleSaveItem}
+          onDelete={handleDeleteItem}
+        />
+      )}
     </div>
   );
 }
