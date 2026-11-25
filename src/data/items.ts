@@ -1,69 +1,56 @@
-import type { Item } from "@/types/item";
+import type { Category, ItemStatus } from "@/types/item";
 
-export const SEED_ITEMS: Item[] = [
+export type SeedItemInput = {
+  name: string;
+  category: Category;
+  status: ItemStatus;
+  amazonAsin?: string;
+  defaultQty: number;
+  daysAgo: number;
+};
+
+export const DEFAULT_SEED_ITEMS: SeedItemInput[] = [
   {
-    id: "11111111-1111-4111-8111-111111111111",
     name: "厕纸",
     category: "bathroom",
     status: "red",
     amazonAsin: "B074CR89IB",
     defaultQty: 2,
-    lastRestockedAt: "2026-10-02T12:00:00.000Z",
+    daysAgo: 32,
   },
   {
-    id: "22222222-2222-4222-8222-222222222222",
-    name: "洗洁精",
-    category: "bathroom",
-    status: "yellow",
-    defaultQty: 1,
-    lastRestockedAt: "2026-10-18T12:00:00.000Z",
-  },
-  {
-    id: "33333333-3333-4333-8333-333333333333",
-    name: "矿泉水",
-    category: "kitchen",
-    status: "yellow",
-    defaultQty: 2,
-    lastRestockedAt: "2026-11-01T12:00:00.000Z",
-  },
-  {
-    id: "44444444-4444-4444-8444-444444444444",
-    name: "咖啡胶囊",
-    category: "kitchen",
-    status: "green",
-    defaultQty: 1,
-    lastRestockedAt: "2026-11-12T12:00:00.000Z",
-  },
-  {
-    id: "55555555-5555-4555-8555-555555555555",
     name: "狗粮",
     category: "pet",
     status: "red",
     defaultQty: 1,
-    lastRestockedAt: "2026-09-20T12:00:00.000Z",
+    daysAgo: 40,
   },
   {
-    id: "66666666-6666-4666-8666-666666666666",
-    name: "猫砂",
-    category: "pet",
-    status: "green",
-    defaultQty: 1,
-    lastRestockedAt: "2026-11-08T12:00:00.000Z",
-  },
-  {
-    id: "77777777-7777-4777-8777-777777777777",
-    name: "垃圾袋",
-    category: "other",
+    name: "洗洁精",
+    category: "bathroom",
     status: "yellow",
     defaultQty: 1,
-    lastRestockedAt: "2026-10-28T12:00:00.000Z",
+    daysAgo: 21,
   },
   {
-    id: "88888888-8888-4888-8888-888888888888",
-    name: "电池",
+    name: "矿泉水",
+    category: "kitchen",
+    status: "yellow",
+    defaultQty: 2,
+    daysAgo: 14,
+  },
+  {
+    name: "咖啡胶囊",
+    category: "kitchen",
+    status: "green",
+    defaultQty: 1,
+    daysAgo: 5,
+  },
+  {
+    name: "垃圾袋",
     category: "other",
     status: "green",
     defaultQty: 1,
-    lastRestockedAt: "2026-11-15T12:00:00.000Z",
+    daysAgo: 7,
   },
 ];

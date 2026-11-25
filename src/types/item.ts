@@ -4,6 +4,7 @@ export type ItemStatus = "green" | "yellow" | "red";
 
 export type Item = {
   id: string;
+  householdId: string;
   name: string;
   category: Category;
   status: ItemStatus;
